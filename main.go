@@ -48,6 +48,16 @@ func (srv *Server) Start() error {
 }
 
 func (srv *Server) handleRawMessage(rawMsg []byte) error {
+	cmd, err := ParseCommand(string(rawMsg))
+	if err != nil {
+		return err
+	}
+
+	switch cmd.(type) {
+	case SetCommand:
+
+	}
+
 	return nil
 }
 
