@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net"
+	"time"
 
+	"github.com/ahmadfarhanstwn/goredis/client"
 	"golang.org/x/exp/slog"
 )
 
@@ -99,6 +102,19 @@ func (srv *Server) handleConnection(conn net.Conn) {
 }
 
 func main() {
-	server := NewServer(Config{})
-	log.Fatal(server.Start())
+	go func() {
+		server := NewServer(Config{})
+		log.Fatal(server.Start())
+	}()
+
+	time.Sleep(1 * time.Second)
+
+	for i := 0; i < 10; i++ {
+		client := client.New("localhost:5001")
+		if err := client.Set(context.TODO(), "foo", "bar"); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	time.Sleep(1 * time.Second)
 }
