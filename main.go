@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"time"
@@ -23,6 +24,7 @@ type Server struct {
 	peers      map[*Peer]bool
 	quitPeerCh chan struct{}
 	msgCh      chan []byte
+	keyVal     *KeyVal
 }
 
 func NewServer(cfg Config) *Server {
@@ -36,6 +38,7 @@ func NewServer(cfg Config) *Server {
 		peers:      make(map[*Peer]bool),
 		quitPeerCh: make(chan struct{}),
 		msgCh:      make(chan []byte),
+		keyVal:     NewKeyVal(),
 	}
 }
 
@@ -56,9 +59,9 @@ func (srv *Server) handleRawMessage(rawMsg []byte) error {
 		return err
 	}
 
-	switch cmd.(type) {
+	switch v := cmd.(type) {
 	case SetCommand:
-
+		return srv.keyVal.Set(v.key, v.value)
 	}
 
 	return nil
@@ -102,8 +105,8 @@ func (srv *Server) handleConnection(conn net.Conn) {
 }
 
 func main() {
+	server := NewServer(Config{})
 	go func() {
-		server := NewServer(Config{})
 		log.Fatal(server.Start())
 	}()
 
@@ -111,10 +114,11 @@ func main() {
 
 	for i := 0; i < 10; i++ {
 		client := client.New("localhost:5001")
-		if err := client.Set(context.TODO(), "foo", "bar"); err != nil {
+		if err := client.Set(context.TODO(), fmt.Sprintf("foo%d", i), fmt.Sprintf("bar%d", i)); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	time.Sleep(1 * time.Second)
+	fmt.Println(server.keyVal.data)
 }
