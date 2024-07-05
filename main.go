@@ -17,13 +17,18 @@ type Config struct {
 	ListenAddress string
 }
 
+type Message struct {
+	data []byte
+	peer *Peer
+}
+
 type Server struct {
 	Config
 	ln         net.Listener
 	addPeerCh  chan *Peer
 	peers      map[*Peer]bool
 	quitPeerCh chan struct{}
-	msgCh      chan []byte
+	msgCh      chan Message
 	keyVal     *KeyVal
 }
 
@@ -37,7 +42,7 @@ func NewServer(cfg Config) *Server {
 		addPeerCh:  make(chan *Peer),
 		peers:      make(map[*Peer]bool),
 		quitPeerCh: make(chan struct{}),
-		msgCh:      make(chan []byte),
+		msgCh:      make(chan Message),
 		keyVal:     NewKeyVal(),
 	}
 }
@@ -53,8 +58,8 @@ func (srv *Server) Start() error {
 	return srv.AcceptLoop()
 }
 
-func (srv *Server) handleRawMessage(rawMsg []byte) error {
-	cmd, err := ParseCommand(string(rawMsg))
+func (srv *Server) handleMessage(msg Message) error {
+	cmd, err := ParseCommand(string(msg.data))
 	if err != nil {
 		return err
 	}
@@ -62,6 +67,15 @@ func (srv *Server) handleRawMessage(rawMsg []byte) error {
 	switch v := cmd.(type) {
 	case SetCommand:
 		return srv.keyVal.Set(v.key, v.value)
+	case GetCommand:
+		val, ok := srv.keyVal.Get(v.key)
+		if !ok {
+			return fmt.Errorf("key not found")
+		}
+		_, err := msg.peer.Send(val)
+		if err != nil {
+			slog.Error("peer send error", "err", err)
+		}
 	}
 
 	return nil
@@ -70,8 +84,8 @@ func (srv *Server) handleRawMessage(rawMsg []byte) error {
 func (srv *Server) loop() {
 	for {
 		select {
-		case rawMsg := <-srv.msgCh:
-			if err := srv.handleRawMessage(rawMsg); err != nil {
+		case msg := <-srv.msgCh:
+			if err := srv.handleMessage(msg); err != nil {
 				slog.Error("raw message error", "error", err)
 			}
 		case <-srv.quitPeerCh:
@@ -117,8 +131,11 @@ func main() {
 		if err := client.Set(context.TODO(), fmt.Sprintf("foo%d", i), fmt.Sprintf("bar%d", i)); err != nil {
 			log.Fatal(err)
 		}
+		time.Sleep(time.Second)
+		val, err := client.Get(context.TODO(), fmt.Sprintf("foo%d", i))
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("got this => ", val)
 	}
-
-	time.Sleep(1 * time.Second)
-	fmt.Println(server.keyVal.data)
 }
